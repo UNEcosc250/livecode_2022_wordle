@@ -1,6 +1,6 @@
-package cosc250.firststeps
+package cosc250.wordle
 
-class TestSuite extends munit.FunSuite {
+class WordleSuite extends munit.FunSuite {
 
   test("This is only a placeholder test") {
     assertEquals(true, true)
