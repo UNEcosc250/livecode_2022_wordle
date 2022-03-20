@@ -8,12 +8,15 @@ enum Color(val escape: String):
   case Orange extends Color("\u001b[33m")
   case Gray  extends Color("\u001b[38;5;246m")
 
+// Given a target word and a guess, what letters would be marked in green?
 def greenLetters(target:String, guess:String):Seq[(Char, Int)] = 
   val zipped = target.zip(guess)
   for 
     ((targetLetter, guessLetter), i) <- zipped.zipWithIndex if targetLetter == guessLetter
   yield (targetLetter, i)
 
+// Given the non-green letters (and their locations) from the target word and guess, works out
+// what would be orange
 def orangeLetters(target:CharLocations, guess:CharLocations):Seq[(Char, Int)] = 
   val targetGroups = target.groupBy(_._1)
   val guessGroups = guess.groupBy(_._1)
@@ -24,6 +27,8 @@ def orangeLetters(target:CharLocations, guess:CharLocations):Seq[(Char, Int)] =
   yield
     c -> index
 
+// Does the working for a wordle round - take the target word and the guess and work out what letters
+// are in what colour
 def colourise(target:String, guess:String) =
   val green = greenLetters(target, guess)
   
@@ -39,50 +44,18 @@ def colourise(target:String, guess:String) =
     ++ grey.map({ case (c, i) => (Color.Gray, c, i)})
   )
 
+// Our letters and their colours come out in unknown order. For easy printing,
+// put them back in order.
 def inOrder(triple:Seq[(Color, Char, Int)]):Seq[(Color, Char)] =
   for (col, char, i) <- triple.sortBy(_._3) yield (col, char)
 
+// Turns a sequence of characters and colours into a coloured terminal string
 def colourisedString(chars:Seq[(Color, Char)]):String = 
   (for (col, c) <- chars yield s"${col.escape} $c\u001b[0m").mkString
 
-
-class IO[A](action: () => A):
-  def map[B](f: A => B):IO[B] = IO(() => f(action()))
-  def flatMap[B](f: A => IO[B]) = f(action())
-
-  def unsafeRunSync:A = action()
-
-
-def readFile(path:String):IO[Seq[String]] = IO(() => 
-  import scala.io.*
-  Source.fromFile(path).getLines.toSeq
-)
-  
-def getWordList:IO[Seq[String]] = readFile("src/main/resources/words.txt")
-
-def chooseWord(wordList:Seq[String]):IO[String] = IO(() => 
-  import scala.util.Random
-  wordList(Random.nextInt(wordList.length))
-)
-
-def readGuess(wordList:Seq[String]):IO[String] = IO({ () => 
-  var guess = ""
-  while {
-    println("Enter your guess") 
-    guess = scala.io.StdIn.readLine
-    !wordList.contains(guess)
-  } do {
-    println("Not a valid word.")
-  }
-
-  guess
-})
-
-def printResult(result:Seq[(Color, Char)]):IO[Unit] = IO(() =>
-  println(colourisedString(result))
-)
-
+// Decribes the state of a game...
 case class GameState(wordList:Seq[String], target:String, guessesRemaining:Int):
+  // runs a single guess from this game state to produce a new game state
   def doGuess:IO[GameState] = 
     for 
       _ <- IO(() => println(s"You have $guessesRemaining guesses remaining."))
@@ -92,28 +65,18 @@ case class GameState(wordList:Seq[String], target:String, guessesRemaining:Int):
     yield
       GameState(wordList, target, guessesRemaining - 1)
 
+  // play is recursive.
   def play:IO[Unit] =
     if guessesRemaining <= 0 then IO(() => println(target)) else doGuess.flatMap(_.play)
 
-@main def testread = 
-  println("Enter")
-  val x = scala.io.StdIn.readLine
-  println(x)
-
-@main def wordle = 
-  (for 
+// We can describe our program in terms of its IO actions
+def wordleGame:IO[Unit] = 
+  for 
     wordList <- getWordList
     target <- chooseWord(wordList)
     gs = GameState(wordList, target, 6)
     _ <- gs.play
-  yield ()).unsafeRunSync
+  yield ()
 
-
-@main def run =
-  println(colourisedString(inOrder(colourise("SCALA", "SCRAM"))))
-
-@main def five = 
-  import scala.io.*
-
-  val file = Source.fromFile("src/main/resources/words.txt").getLines
-  for line <- file if line.length == 5 && !line.contains('-') do println(line)
+// To execute our program, we run the program description
+@main def runWordle = wordleGame.unsafeRunSync
